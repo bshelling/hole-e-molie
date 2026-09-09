@@ -1,0 +1,92 @@
+name: Phase 2 - NOLA-311 Integration Tests
+
+on:
+  push:
+    branches: [ main, phase-2-* ]
+    paths:
+      - 'agents/**'
+      - '.github/workflows/phase2-tests.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'agents/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: ./agents
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.13'
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v5
+      with:
+        enable-cache: true
+
+    - name: Install dependencies
+      run: |
+        uv sync
+
+    - name: Install Playwright browsers
+      run: |
+        uv run playwright install chromium
+        uv run playwright install-deps chromium
+
+    - name: Check code formatting with ruff
+      run: |
+        uv run ruff format --check src/
+        uv run ruff check src/
+
+    - name: Test Phase 1 dependencies
+      run: |
+        uv run python -c "import fastapi; import uvicorn; import websockets"
+
+    - name: Test Phase 2 dependencies
+      run: |
+        uv run python -c "from playwright.async_api import async_playwright; import bs4; import lxml"
+
+    - name: Test model imports
+      run: |
+        uv run python -c "from agents.models import Location, PotholeReport, StatusResult, SubmissionResult"
+
+    - name: Test integration imports
+      run: |
+        uv run python -c "from agents.integrations import BrowserManager, NOLA311Connector"
+
+    - name: Run Phase 2 model tests
+      run: |
+        uv run python tests/phase2/test_models.py
+
+    - name: Run Phase 2 NOLA-311 connector tests
+      run: |
+        uv run python tests/phase2/test_nola311.py
+
+    - name: Run Phase 2 automated test suite
+      run: |
+        chmod +x tests/test_phase2.sh
+        ./tests/test_phase2.sh
+
+    - name: Test report generation
+      if: success()
+      run: |
+        echo "✅ All Phase 2 tests passed!" > test-results-phase2.txt
+        echo "Date: $(date)" >> test-results-phase2.txt
+        echo "Commit: ${{ github.sha }}" >> test-results-phase2.txt
+
+    - name: Upload test results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: phase2-test-results
+        path: agents/test-results-phase2.txt
+        if-no-files-found: ignore
