@@ -1,2 +1,5 @@
-def main() -> None:
-    print("Hello from agents!")
+"""HoleeMoly Agents module"""
+
+from .main import app, run
+
+__all__ = ["app", "run"]

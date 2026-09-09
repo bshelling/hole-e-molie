@@ -1,0 +1,88 @@
+name: Phase 1 - Backend Tests
+
+on:
+  push:
+    branches: [ main, phase-1-* ]
+    paths:
+      - 'agents/**'
+      - '.github/workflows/phase1-backend-tests.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'agents/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: ./agents
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.13'
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v5
+      with:
+        enable-cache: true
+
+    - name: Install dependencies
+      run: |
+        uv sync
+
+    - name: Check code formatting with ruff
+      run: |
+        uv run ruff format --check src/
+        uv run ruff check src/
+
+    - name: Test dependency imports
+      run: |
+        uv run python -c "import fastapi; import uvicorn; import websockets; from pydantic import BaseModel; from pydantic_settings import BaseSettings"
+
+    - name: Test configuration
+      run: |
+        uv run python -c "from agents.config import get_settings; s = get_settings()"
+      env:
+        BEDROCK_MODEL: us.anthropic.claude-sonnet-4-6
+        AWS_DEFAULT_PROFILE: default
+        AWS_REGION: us-east-1
+        CORS_ORIGINS: http://localhost:3000
+
+    - name: Test FastAPI app import
+      run: |
+        uv run python -c "from agents import app; assert app.title == 'HoleeMoly API'"
+      env:
+        BEDROCK_MODEL: us.anthropic.claude-sonnet-4-6
+        AWS_DEFAULT_PROFILE: default
+
+    - name: Run Phase 1 automated tests
+      run: |
+        chmod +x tests/test_phase1.sh
+        ./tests/test_phase1.sh
+      env:
+        BEDROCK_MODEL: us.anthropic.claude-sonnet-4-6
+        AWS_DEFAULT_PROFILE: default
+        AWS_REGION: us-east-1
+        CORS_ORIGINS: http://localhost:3000
+
+    - name: Test report generation
+      if: success()
+      run: |
+        echo "✅ All Phase 1 tests passed!" > test-results.txt
+        echo "Date: $(date)" >> test-results.txt
+        echo "Commit: ${{ github.sha }}" >> test-results.txt
+
+    - name: Upload test results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: phase1-test-results
+        path: agents/test-results.txt
+        if-no-files-found: ignore
